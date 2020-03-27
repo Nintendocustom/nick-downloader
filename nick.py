@@ -3,6 +3,7 @@ import re
 import ffmpeg
 import requests
 import xml.etree.ElementTree as ET
+import sys
 
 MGID = "mgid:arc:promotion:nick.com:0cdfdb4d-ab75-45a4-9ee0-a5ec3205c248"
 
@@ -72,7 +73,10 @@ class Show:
                 yield cls(item)
 
     def get_episodes(self):
-        items = requests.get(self.links["episode"]).json()["data"]["items"]
+        try:
+            items = requests.get(self.links["episode"]).json()["data"]["items"]
+        except KeyError:
+            sys.exit("Currently no episode is available")
         for item in items:
             yield Episode(self, item)
 
