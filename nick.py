@@ -1,19 +1,11 @@
+import sys
 import os
 import re
-import sys
-import xml.etree.ElementTree as ET
-
 import ffmpeg
 import requests
-
-# You can download an "episode" or a "video"
-download_type = "episode"
-
-# You can download subtitle file-type "ttml" and "vtt" or "both"
-subtitle_type = "ttml"
+import xml.etree.ElementTree as ET
 
 MGID = "mgid:arc:promotion:nick.com:0cdfdb4d-ab75-45a4-9ee0-a5ec3205c248"
-
 
 def format_name(name, include_segment=False):
     name = re.sub(r"[<>:\/|?*]", " ", name)
@@ -24,7 +16,6 @@ def format_name(name, include_segment=False):
         else:
             name = quoted
     return " ".join(name.split())
-
 
 class Episode:
     def __init__(self, show, item):
@@ -40,17 +31,9 @@ class Episode:
         }).json()["package"]["video"]["item"][0]
         src = item["rendition"][-1]["src"]
         if "transcript" in item:
-            if subtitle_type == "both":
-                for f in range(2):
-                    sub_type = ["ttml", "vtt"]
-                    subtitles = next(i for i in item["transcript"][0]["typographic"] if i["format"] == sub_type[int(f)])
-                    with open(f"{output}." + sub_type[f], "w", encoding="utf-8") as file:
-                        file.write(requests.get(subtitles["src"]).text)
-            else:
-                subtitles = next(i for i in item["transcript"][0]["typographic"] if i["format"] == subtitle_type)
-                with open(f"{output}." + subtitle_type, "w", encoding="utf-8") as file:
-                    file.write(requests.get(subtitles["src"]).text)
-        print(src)
+            subtitles = next(i for i in item["transcript"][0]["typographic"] if i["format"] == "ttml")
+            with open(f"{output}.ttml", "w", encoding="utf-8") as file:
+                file.write(requests.get(subtitles["src"]).text)
         ffmpeg.input(src).output(f"{output}.mp4", vcodec="copy").overwrite_output().run()
 
     def download(self):
@@ -71,7 +54,6 @@ class Episode:
     def __str__(self):
         return self.name
 
-
 class Show:
     def __init__(self, item):
         self.name = item["title"]
@@ -91,16 +73,15 @@ class Show:
                 yield cls(item)
 
     def get_episodes(self):
-        try:
-            items = requests.get(self.links[download_type]).json()["data"]["items"]
-        except KeyError:
-            sys.exit("Currently no " + download_type + " is available")
+        episode = self.links.get("episode")
+        if episode is None:
+            raise Exception("Currently no episode is available")
+        items = requests.get(episode).json()["data"]["items"]
         for item in items:
             yield Episode(self, item)
 
     def __str__(self):
         return self.name
-
 
 def choose(items, name):
     items = list(items)
@@ -108,12 +89,15 @@ def choose(items, name):
         print(f"{i}. {item}")
     return items[int(input(f"Which {name}? ")) - 1]
 
-
 def main():
-    show = choose(Show.get_shows(MGID), "show")
-    episode = choose(show.get_episodes(), download_type)
-    episode.download()
-
+    try:
+        show = choose(Show.get_shows(MGID), "show")
+        episode = choose(show.get_episodes(), "episode")
+    except Exception as e:
+        print(e)
+        sys.exit(1)
+    else:
+        episode.download()
 
 if __name__ == "__main__":
     main()
